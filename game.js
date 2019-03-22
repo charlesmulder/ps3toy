@@ -62,81 +62,190 @@ const colorNames = {
     zinnwalditeBrown: 0x2E1E0F
 };
 
-const colors = Object.values(colorNames);
+//const colors = Object.values(colorNames);
+const colors = [PS.COLOR_BLACK, PS.COLOR_GRAY, PS.COLOR_BLACK, PS.COLOR_GRAY, PS.COLOR_BLACK, PS.COLOR_GRAY, PS.COLOR_BLACK, PS.COLOR_GRAY, PS.COLOR_BLACK];
+const icons = [0x2662, 0x266b, 0x2606, 0x2734, 0x25C8, 0x25CE, 0x2702, 0x2740, 0x2682];
 
-const instrument = "l_hchord";
-const notes = ["c5", "d5", "e5", "f5", "g5", "a5", "b5", "c6", "d6"];
-var channels = {};
+const instrument = "l_piano";
+
+//var previous = [];
+
+// TODO: randomize the scale
+
+/**
+ * Hang
+ * Typically there is a fundamental tone, an overtone tuned to an octave above that fundamental, and an additional overtone a perfect fifth above that octave (twelfth or tritave). 
+ * F major - D3 Ding, A3, B♭3, C4, D4, E4, F4, A4, (D5, F5 ,F#5) Gu 
+ * https://en.wikipedia.org/wiki/Hang_(instrument)
+ */
+const ding = "d3";
+const gu = "d5";
+const notes = ["c4", "d4", "e4", "bb3", ding, "f4", "a3", gu, "a4"];
+
+/**
+ * Gubal
+ * The Ringding is tuned to four partial tones: E♭3, B♭3, E♭4 and G5. This way it serves a double function: It is a sound source itself as well as the place to excite the bass sound of the Helmholtz resonance.[6]
+ * The Ringding is surrounded by the ring of seven seven tone fields created with the hammer and tuned to the notes B♭3, C4, D♭4, E♭4, F4, G4 and B♭4.
+ * Bb major - 
+ * https://en.wikipedia.org/wiki/Gubal_(instrument)
+ */
+//const ding = ["eb3", "bb3", "g5"];
+//const gu = ["eb2", "bb3"];
+//const notes = [["bb3", "f5"], ["c4", "g5"], ["db4", "ab5"], ["eb4", "bb5"], ding, ["f4", "c6"], ["g4", "eb6"], gu, ["bb4", "eb6"]];
+
+function isChord(data) {
+    return Array.isArray(data);
+}
+
+function isNote(data) {
+    return typeof data === 'string';
+}
 
 PS.init = function( system, options ) {
 	"use strict"; // Do not remove this directive!
 
-	// Uncomment the following code line
-	// to verify operation:
-
-	// PS.debug( "PS.init() called\n" );
-
-	// This function should normally begin
-	// with a call to PS.gridSize( x, y )
-	// where x and y are the desired initial
-	// dimensions of the grid.
-	// Call PS.gridSize() FIRST to avoid problems!
-	// The sample call below sets the grid to the
-	// default dimensions (8 x 8).
-	// Uncomment the following code line and change
-	// the x and y parameters as needed.
-
 	PS.gridSize( 3, 3 );
-
-	// This is also a good place to display
-	// your game title or a welcome message
-	// in the status line above the grid.
-	// Uncomment the following code line and
-	// change the string parameter as needed.
-
     PS.gridColor( 255, 256, 666 );
 
-
-    function attachToBeads(callback) {
-        /**
-         * paint the grid and assign note names 
-         */
-        let colorStart = 0;
-        for(let y=0; y<3; y++) {
-            for(let x=0; x<3; x++) {
-                callback(x, y, colorStart);
-            }
-            colorStart += 3;
-        }
-        console.log("channels", channels);
-    }
-
-    attachToBeads((x, y, colorStart) => {
-        PS.color(x, y, colors[colorStart+x]);
-        PS.border(x, y, 0);
-    });
-    PS.statusText( "Loading audio" );
-
     /**
-     * preload sounds
+     * @param {string} instrument - instrument name 
+     * @param {note} note - note namew
+     * @callback {noteLoadedCallback} callback 
+     *
+     * @callback noteLoadedCallback
+     * @param {string} channel id
      */
-    let loaded = 0;
-    notes.forEach((note) => {
+    function loadNote(instrument, note, volume, callback) {
+        console.log('loading note', note, 'with volume', volume);
         PS.audioLoad(`${instrument}_${note}`, {
+            volume: volume,
             lock: true,
             onLoad: (data) => {
-                loaded++;
-                channels[data.name] = data.channel;
-                if(loaded == notes.length) {
-                    attachToBeads((x, y, colorStart) => PS.data(x, y, channels[instrument+"_"+notes[colorStart+x]]));
-                    PS.statusText( "Play a tune" );
-                }
+                callback(data.channel);
             }
+        });
+    }
+
+    /**
+     * @param {string} instrument - instrument name
+     * @param {<string[]} chord - 3 notes
+     * @callback {chordLoadedCallback} callback
+     *
+     * @callback chordLoadedCallback
+     * @param {string[]} channel ids
+     */
+    function loadChord(instrument, chord, callback) {
+        console.log('loading chord', chord);
+        let channelIds = [];
+        let volume = 1;
+        chord.forEach(note => {
+            loadNote(instrument, note, volume, (channel) => {
+                channelIds.push(channel);
+            });
+            volume*=0.5;
+        });
+        callback(channelIds);
+    }
+
+    function isAllSoundsLoaded(notes, loaded, callback) {
+        console.log('all sounds loaded?', notes, loaded, (loaded == notes.length));
+        if(loaded == notes.length) {
+            callback();
+        }
+    }
+
+    /**
+     * preload all sounds
+     */
+    function preloadAllSounds(callback) {
+        let loaded = 0;
+        notes.forEach((note, index) => {
+            let col = calcColumn(index);
+            let row = calcRow(index);
+            let color = calcColor(col, row, colors);
+            if(isChord(note)) {
+                console.log('gu');
+                loadChord(instrument, note, (channelIds) => {
+                    PS.color(col, row, color);
+                    //PS.glyph(col, row, icons[row*3+col]);
+                    PS.data(col, row, channelIds);
+                    isAllSoundsLoaded(notes, ++loaded, callback);
+                });
+            } else {
+                loadNote(instrument, note, 0.5, (channelId) => {
+                    PS.color(col, row, color);
+                    //PS.glyph(col, row, icons[row*3+col]);
+                    PS.data(col, row, channelId);
+                    isAllSoundsLoaded(notes, ++loaded, callback);
+                });
+            }
+        });
+    }
+
+    /**
+     * @callback {beadCallback} callback - 
+     *
+     * @callback beadCallback
+     * @param {number} x
+     * @param {number} y
+     * @param {number} triplet
+     */
+    function allBeads(callback) {
+        for(let y=0; y<3; y++) {
+            for(let x=0; x<3; x++) {
+                callback(x, y);
+            }
+        }
+    }
+
+    /**
+     * Calculate column (x)
+     */
+    function calcColumn(index) {
+        return index % 3;
+    }
+
+
+    /**
+     * Calculate row (y)
+     */
+    function calcRow(index) {
+        return Math.floor(index/3);
+    }
+
+    /**
+     * Calculate color (hex)
+     *
+     * @param {number} column
+     * @param {number} row
+     * @param {hex[]} colors
+     * @return {hex} color
+     */
+    function calcColor(column, row, colors) {
+        return colors[row*3+column];
+    }
+
+    function loading() {
+        document.querySelector('canvas').style.cursor = 'wait';
+        PS.gridColor(PS.COLOR_WHITE);
+        allBeads((x, y) => {
+            PS.border(x, y, 0);
+            //PS.radius(x, y, 50);
+            PS.fade(x, y, 60);
+        });
+        PS.statusText( "Loading audio" );
+    }
+
+
+    loading();
+    preloadAllSounds(() => {
+        document.querySelector('canvas').style.cursor = 'pointer';
+        PS.statusText( "Play a tune" );
+        allBeads((x, y) => {
+            PS.fade(x, y, 10);
         });
     });
 
-
-	// Add any other initialization code you need here.
 };
 
 /*
@@ -151,10 +260,33 @@ This function doesn't have to do anything. Any value returned is ignored.
 
 // UNCOMMENT the following code BLOCK to expose the PS.touch() event handler:
 
+/**
+ * Adjust saturation of colors when touched
+ * http://www.niwa.nu/2013/05/math-behind-colorspace-conversions-rgb-hsl/
+ */
 PS.touch = function( x, y, data, options ) {
 	"use strict"; // Do not remove this directive!
-    console.log("options", data);
-    PS.audioPlayChannel(data);
+    if(isNote(data)) { 
+        PS.audioPlayChannel(data);
+        //if((previous.length && (previous[0] != x || previous[1] != y)) || !previous.length) {
+        PS.color(x, y, PS.random(255), PS.random(255), PS.random(255));
+        PS.glyph(x, y, icons[PS.random(9)-1]);
+        //}
+    }
+    if(isChord(data)) {
+        // might need to use promises here
+        data.forEach((note) => {
+            console.log('playing channelId', note);
+            PS.audioPlayChannel(note);
+        });
+        //if((previous.length && (previous[0] != x || previous[1] != y)) || !previous.length) {
+        //PS.gridShadow(true, PS.random(255));
+        PS.color(x, y, PS.random(255), PS.random(255), PS.random(255));
+        PS.glyph(x, y, icons[PS.random(9)-1]);
+        //}
+    }
+    //previous = [x, y];
+
 };
 
 /*
@@ -172,7 +304,7 @@ PS.release = function( x, y, data, options ) {
 
 	// Uncomment the following code line to inspect x/y parameters:
 
-	PS.debug( "PS.release() @ " + x + ", " + y + "\n" );
+    //PS.debug( "PS.release() @ " + x + ", " + y + "\n" );
 
 	// Add code here for when the mouse button/touch is released over a bead.
 }
@@ -237,7 +369,7 @@ PS.exitGrid = function( options ) {
 
 	// Uncomment the following code line to verify operation:
 
-	PS.debug( "PS.exitGrid() called\n" );
+    //PS.debug( "PS.exitGrid() called\n" );
 
 	// Add code here for when the mouse cursor/touch moves off the grid.
 };
