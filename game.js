@@ -62,6 +62,8 @@ const colorNames = {
     zinnwalditeBrown: 0x2E1E0F
 };
 
+const taunt = "Touch a square. If you dare.";
+
 //const colors = Object.values(colorNames);
 const colors = [PS.COLOR_BLACK, PS.COLOR_GRAY, PS.COLOR_BLACK, PS.COLOR_GRAY, PS.COLOR_BLACK, PS.COLOR_GRAY, PS.COLOR_BLACK, PS.COLOR_GRAY, PS.COLOR_BLACK];
 const icons = [0x2662, 0x266b, 0x2606, 0x2734, 0x25C8, 0x25CE, 0x2702, 0x2740, 0x2682];
@@ -216,7 +218,7 @@ PS.init = function( system, options ) {
     loading();
     preloadAllSounds(() => {
         document.querySelector('canvas').style.cursor = 'pointer';
-        PS.statusText( "Play a tune" );
+        PS.statusText( taunt );
         allBeads((x, y) => {
             PS.fade(x, y, 10);
         });
@@ -307,6 +309,9 @@ function calcHueRange(hue, takenHueRanges) {
  */
 PS.touch = function( x, y, data, options ) {
 	"use strict"; // Do not remove this directive!
+    if(PS.statusText() === taunt) {
+        PS.statusText("");
+    }
     if(isNote(data)) { 
         PS.audioPlayChannel(data);
         //PS.unmakeRGB(PS.color(x, y), currentRgbColor);
